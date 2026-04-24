@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NutrioBox - Delivery Delay Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; color: #333; }
+
+  .header {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    color: white; padding: 24px 40px; display: flex; justify-content: space-between; align-items: center;
+  }
+  .header h1 { font-size: 22px; font-weight: 600; }
+  .header .subtitle { font-size: 13px; color: #a0b4d0; margin-top: 4px; }
+  .header .logo { font-size: 28px; font-weight: 700; color: #4fc3f7; }
+
+  .kpi-row {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+    padding: 20px 40px;
+  }
+  .kpi-card {
+    background: white; border-radius: 10px; padding: 18px 22px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06); border-left: 4px solid;
+  }
+  .kpi-card .label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+  .kpi-card .value { font-size: 26px; font-weight: 700; margin-top: 4px; }
+  .kpi-card .change { font-size: 12px; margin-top: 4px; }
+  .kpi-card:nth-child(1) { border-color: #e74c3c; }
+  .kpi-card:nth-child(1) .value { color: #e74c3c; }
+  .kpi-card:nth-child(2) { border-color: #f39c12; }
+  .kpi-card:nth-child(2) .value { color: #f39c12; }
+  .kpi-card:nth-child(3) { border-color: #e74c3c; }
+  .kpi-card:nth-child(3) .value { color: #e74c3c; }
+  .kpi-card:nth-child(4) { border-color: #f39c12; }
+  .kpi-card:nth-child(4) .value { color: #f39c12; }
+
+  .controls {
+    padding: 10px 40px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  }
+  .controls label { font-size: 13px; font-weight: 600; color: #555; }
+  .controls select {
+    padding: 8px 14px; border: 1px solid #ddd; border-radius: 6px;
+    font-size: 13px; background: white; cursor: pointer; min-width: 200px;
+  }
+  .controls select:focus { border-color: #4fc3f7; outline: none; }
+
+  .charts-container {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+    padding: 10px 40px 30px;
+  }
+  .chart-card {
+    background: white; border-radius: 10px; padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  }
+  .chart-card.full-width { grid-column: 1 / -1; }
+  .chart-card h3 { font-size: 15px; color: #333; margin-bottom: 12px; font-weight: 600; }
+  .chart-card canvas { width: 100% !important; }
+
+  .legend-note {
+    text-align: center; padding: 0 40px 20px; font-size: 11px; color: #999;
+  }
+
+  @media (max-width: 1000px) {
+    .charts-container { grid-template-columns: 1fr; }
+    .kpi-row { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="logo">NutrioBox</div>
+    <h1>Delivery Delay Analysis Dashboard</h1>
+    <div class="subtitle">Weekly KOT Report &mdash; Feb 16, 2026 to Apr 19, 2026 (9 Weeks)</div>
+  </div>
+</div>
+
+<div class="kpi-row">
+  <div class="kpi-card">
+    <div class="label">Avg Delay &gt;15 min (Count/Week)</div>
+    <div class="value" id="kpi1">--</div>
+    <div class="change" id="kpi1c"></div>
+  </div>
+  <div class="kpi-card">
+    <div class="label">Avg % Delay &gt;15 min</div>
+    <div class="value" id="kpi2">--</div>
+    <div class="change" id="kpi2c"></div>
+  </div>
+  <div class="kpi-card">
+    <div class="label">Avg Delay &gt;25 min (Count/Week)</div>
+    <div class="value" id="kpi3">--</div>
+    <div class="change" id="kpi3c"></div>
+  </div>
+  <div class="kpi-card">
+    <div class="label">Avg % Delay &gt;25 min</div>
+    <div class="value" id="kpi4">--</div>
+    <div class="change" id="kpi4c"></div>
+  </div>
+</div>
+
+<div class="controls">
+  <label>Outlet:</label>
+  <select id="outletSelect"></select>
+</div>
+
+<div class="charts-container">
+  <div class="chart-card full-width">
+    <h3>Weekly Delay Trend &mdash; Counts (T, V) vs Percentages (U, W)</h3>
+    <canvas id="mainChart" height="90"></canvas>
+  </div>
+  <div class="chart-card">
+    <h3>Delay &gt;15 min: Count (T) &amp; Percentage (U)</h3>
+    <canvas id="chart15" height="120"></canvas>
+  </div>
+  <div class="chart-card">
+    <h3>Delay &gt;25 min: Count (V) &amp; Percentage (W)</h3>
+    <canvas id="chart25" height="120"></canvas>
+  </div>
+  <div class="chart-card full-width">
+    <h3>All Outlets Comparison &mdash; Latest Week (Apr 13 - Apr 19)</h3>
+    <canvas id="compChart" height="80"></canvas>
+  </div>
+</div>
+
+<div class="legend-note">
+  Left Y-Axis = Percentage (U%, W%) &bull; Right Y-Axis = Count (T, V) &bull; Data from Petpooja KOT Reports
+</div>
+
+<script>
+const weeks = [
+  "Feb 16-22","Feb 23-Mar 1","Mar 2-8","Mar 9-15","Mar 16-22","Mar 23-29","Mar 30-Apr 5","Apr 6-12","Apr 13-19"
+];
+
+const outlets = [
+  "DLF - Phase 2","Rajinder Nagar","Noida 63","Dwarka","Janakpuri",
+  "Karkardooma","Noida - Advant","Rohini","Sector 15 - GGN","Shivalik"
+];
+
+// Data: [T, U, V, W] per outlet per week
+const data = {
+  "DLF - Phase 2": [
+    [161,35.54,15,3.31],[234,28.54,13,1.59],[199,29.88,26,3.90],[289,35.30,44,5.40],
+    [614,46.10,477,35.81],[263,35.30,58,7.79],[303,38.50,79,10.04],[357,40.61,133,15.13],
+    [289,35.72,53,6.55]
+  ],
+  "Rajinder Nagar": [
+    [213,35.21,15,2.48],[346,39.18,50,5.66],[275,32.78,31,3.69],[236,28.50,17,2.10],
+    [265,35.38,78,10.41],[262,33.08,28,3.54],[306,37.05,33,4.00],[274,32.01,24,2.80],
+    [233,28.17,14,1.69]
+  ],
+  "Noida 63": [
+    [181,39.01,24,5.17],[244,38.92,44,7.02],[187,38.01,25,5.08],[235,38.70,57,9.40],
+    [217,33.80,55,8.57],[199,37.34,56,10.51],[268,43.93,59,9.67],[251,41.08,90,14.73],
+    [243,46.29,70,13.33]
+  ],
+  "Dwarka": [
+    [296,42.29,28,4.00],[431,41.36,152,14.59],[369,37.05,112,11.24],[421,38.60,121,11.10],
+    [353,38.50,92,10.03],[470,46.81,221,22.01],[482,44.84,199,18.51],[444,39.47,253,22.49],
+    [441,41.25,265,24.79]
+  ],
+  "Janakpuri": [
+    [270,42.79,45,7.13],[327,38.93,99,11.79],[339,39.79,109,12.79],[369,39.80,109,11.80],
+    [200,38.99,61,11.89],[285,35.62,93,11.62],[368,41.91,91,10.36],[408,42.46,150,15.61],
+    [362,40.81,121,13.64]
+  ],
+  "Karkardooma": [
+    [241,26.54,7,0.77],[542,40.48,63,4.71],[623,47.02,81,6.11],[745,54.20,82,6.00],
+    [215,28.63,26,3.46],[566,48.50,99,8.48],[548,42.95,197,15.44],[658,48.35,143,10.51],
+    [593,48.53,200,16.37]
+  ],
+  "Noida - Advant": [
+    [183,37.20,37,7.52],[208,30.72,30,4.43],[223,36.92,23,3.81],[253,32.90,60,7.80],
+    [130,23.51,8,1.45],[272,36.17,83,11.04],[295,41.03,38,5.29],[282,37.95,50,6.73],
+    [298,41.56,47,6.56]
+  ],
+  "Rohini": [
+    [581,47.47,194,15.85],[777,46.67,483,29.01],[683,43.59,482,30.76],[744,43.70,690,40.50],
+    [367,42.28,43,4.95],[768,50.69,394,26.01],[773,47.22,573,35.00],[712,42.66,640,38.35],
+    [704,43.81,656,40.82]
+  ],
+  "Sector 15 - GGN": [
+    [67,19.59,2,0.58],[182,29.12,14,2.24],[122,20.75,6,1.02],[217,32.50,10,1.50],
+    [471,46.50,51,5.03],[168,27.91,16,2.66],[191,28.09,25,3.68],[301,39.24,35,4.56],
+    [321,50.39,85,13.34]
+  ],
+  "Shivalik": [
+    [181,25.35,2,0.28],[296,29.93,31,3.13],[356,36.22,35,3.56],[436,41.90,43,4.10],
+    [289,40.76,65,9.17],[405,39.67,41,4.02],[325,34.98,22,2.37],[430,37.46,43,3.75],
+    [399,38.63,48,4.65]
+  ]
+};
+
+// --- ALL OUTLETS aggregate ---
+function getAllOutletData() {
+  return weeks.map((_, wi) => {
+    let sT=0, sU=0, sV=0, sW=0, n=outlets.length;
+    outlets.forEach(o => { sT+=data[o][wi][0]; sU+=data[o][wi][1]; sV+=data[o][wi][2]; sW+=data[o][wi][3]; });
+    return [Math.round(sT/n), +(sU/n).toFixed(2), Math.round(sV/n), +(sW/n).toFixed(2)];
+  });
+}
+
+// Populate select
+const sel = document.getElementById('outletSelect');
+const allOpt = document.createElement('option');
+allOpt.value = '__ALL__'; allOpt.textContent = 'All Outlets (Average)';
+sel.appendChild(allOpt);
+outlets.forEach(o => { const op = document.createElement('option'); op.value = o; op.textContent = o; sel.appendChild(op); });
+
+// Colors
+const colors = {
+  T: '#e74c3c', U: '#f39c12', V: '#8e44ad', W: '#2980b9'
+};
+
+let mainChart, chart15, chart25, compChart;
+
+function updateKPIs(d) {
+  const avgT = (d.reduce((s,r)=>s+r[0],0)/d.length).toFixed(0);
+  const avgU = (d.reduce((s,r)=>s+r[1],0)/d.length).toFixed(1);
+  const avgV = (d.reduce((s,r)=>s+r[2],0)/d.length).toFixed(0);
+  const avgW = (d.reduce((s,r)=>s+r[3],0)/d.length).toFixed(1);
+  document.getElementById('kpi1').textContent = avgT;
+  document.getElementById('kpi2').textContent = avgU + '%';
+  document.getElementById('kpi3').textContent = avgV;
+  document.getElementById('kpi4').textContent = avgW + '%';
+
+  // Trend: compare last half vs first half
+  const half = Math.floor(d.length/2);
+  const h1U = d.slice(0,half).reduce((s,r)=>s+r[1],0)/half;
+  const h2U = d.slice(half).reduce((s,r)=>s+r[1],0)/(d.length-half);
+  const diff = (h2U - h1U).toFixed(1);
+  document.getElementById('kpi2c').innerHTML = diff > 0
+    ? `<span style="color:#e74c3c">&uarr; ${diff}% vs first half</span>`
+    : `<span style="color:#27ae60">&darr; ${Math.abs(diff)}% vs first half</span>`;
+
+  const h1W = d.slice(0,half).reduce((s,r)=>s+r[3],0)/half;
+  const h2W = d.slice(half).reduce((s,r)=>s+r[3],0)/(d.length-half);
+  const diffW = (h2W - h1W).toFixed(1);
+  document.getElementById('kpi4c').innerHTML = diffW > 0
+    ? `<span style="color:#e74c3c">&uarr; ${diffW}% vs first half</span>`
+    : `<span style="color:#27ae60">&darr; ${Math.abs(diffW)}% vs first half</span>`;
+}
+
+function buildMainChart(d) {
+  const ctx = document.getElementById('mainChart').getContext('2d');
+  if (mainChart) mainChart.destroy();
+  mainChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: weeks,
+      datasets: [
+        { label: 'U: % Delay >15 min', data: d.map(r=>r[1]), borderColor: colors.U, yAxisID: 'y', tension: 0, borderWidth: 2.5, pointRadius: 4, fill: false },
+        { label: 'W: % Delay >25 min', data: d.map(r=>r[3]), borderColor: colors.W, yAxisID: 'y', tension: 0, borderWidth: 2.5, pointRadius: 4, fill: false },
+        { label: 'T: Count Delay >15 min', data: d.map(r=>r[0]), borderColor: colors.T, borderDash: [6,3], yAxisID: 'y1', tension: 0, borderWidth: 2, pointRadius: 3, fill: false },
+        { label: 'V: Count Delay >25 min', data: d.map(r=>r[2]), borderColor: colors.V, borderDash: [6,3], yAxisID: 'y1', tension: 0, borderWidth: 2, pointRadius: 3, fill: false },
+      ]
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'top', labels: { usePointStyle: true, padding: 16, font: { size: 12 } } } },
+      scales: {
+        y: { type: 'linear', position: 'left', title: { display: true, text: 'Percentage (%)', font: { weight: 'bold' } }, grid: { color: '#eee' } },
+        y1: { type: 'linear', position: 'right', title: { display: true, text: 'Count', font: { weight: 'bold' } }, grid: { drawOnChartArea: false } }
+      }
+    }
+  });
+}
+
+function buildChart15(d) {
+  const ctx = document.getElementById('chart15').getContext('2d');
+  if (chart15) chart15.destroy();
+  chart15 = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: weeks,
+      datasets: [
+        { label: 'U: % Delay >15 min', data: d.map(r=>r[1]), borderColor: colors.U, yAxisID: 'y', tension: 0, borderWidth: 2.5, pointRadius: 4, fill: false },
+        { label: 'T: Count >15 min', data: d.map(r=>r[0]), borderColor: colors.T, borderDash: [5,3], yAxisID: 'y1', tension: 0, borderWidth: 2, pointRadius: 3, fill: false },
+      ]
+    },
+    options: {
+      responsive: true, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { labels: { usePointStyle: true, font: { size: 11 } } } },
+      scales: {
+        y: { position: 'left', title: { display: true, text: '%' }, grid: { color: '#eee' } },
+        y1: { position: 'right', title: { display: true, text: 'Count' }, grid: { drawOnChartArea: false } }
+      }
+    }
+  });
+}
+
+function buildChart25(d) {
+  const ctx = document.getElementById('chart25').getContext('2d');
+  if (chart25) chart25.destroy();
+  chart25 = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: weeks,
+      datasets: [
+        { label: 'W: % Delay >25 min', data: d.map(r=>r[3]), borderColor: colors.W, yAxisID: 'y', tension: 0, borderWidth: 2.5, pointRadius: 4, fill: false },
+        { label: 'V: Count >25 min', data: d.map(r=>r[2]), borderColor: colors.V, borderDash: [5,3], yAxisID: 'y1', tension: 0, borderWidth: 2, pointRadius: 3, fill: false },
+      ]
+    },
+    options: {
+      responsive: true, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { labels: { usePointStyle: true, font: { size: 11 } } } },
+      scales: {
+        y: { position: 'left', title: { display: true, text: '%' }, grid: { color: '#eee' } },
+        y1: { position: 'right', title: { display: true, text: 'Count' }, grid: { drawOnChartArea: false } }
+      }
+    }
+  });
+}
+
+function buildCompChart() {
+  const ctx = document.getElementById('compChart').getContext('2d');
+  if (compChart) compChart.destroy();
+  const lastIdx = weeks.length - 1;
+  compChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: outlets,
+      datasets: [
+        { label: 'U: % >15 min', data: outlets.map(o=>data[o][lastIdx][1]), backgroundColor: colors.U+'cc', yAxisID: 'y', barPercentage: 0.7 },
+        { label: 'W: % >25 min', data: outlets.map(o=>data[o][lastIdx][3]), backgroundColor: colors.W+'cc', yAxisID: 'y', barPercentage: 0.7 },
+        { label: 'T: Count >15', data: outlets.map(o=>data[o][lastIdx][0]), type: 'line', borderColor: colors.T, yAxisID: 'y1', tension: 0, borderWidth: 2, pointRadius: 4, fill: false },
+        { label: 'V: Count >25', data: outlets.map(o=>data[o][lastIdx][2]), type: 'line', borderColor: colors.V, yAxisID: 'y1', tension: 0, borderWidth: 2, pointRadius: 4, fill: false },
+      ]
+    },
+    options: {
+      responsive: true, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { labels: { usePointStyle: true, font: { size: 11 } } } },
+      scales: {
+        y: { position: 'left', title: { display: true, text: '%' }, grid: { color: '#eee' } },
+        y1: { position: 'right', title: { display: true, text: 'Count' }, grid: { drawOnChartArea: false } }
+      }
+    }
+  });
+}
+
+function updateAll() {
+  const selected = sel.value;
+  const d = selected === '__ALL__' ? getAllOutletData() : data[selected];
+  updateKPIs(d);
+  buildMainChart(d);
+  buildChart15(d);
+  buildChart25(d);
+  buildCompChart();
+}
+
+sel.addEventListener('change', updateAll);
+updateAll();
+</script>
+</body>
+</html>
